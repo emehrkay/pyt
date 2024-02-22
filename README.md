@@ -15,7 +15,7 @@ An opinionated Go SQLite graph database based on [simple-graph](https://github.c
     - `active` <bool> -- easy way to soft delete
     - `properties` <text> indexed -- a json string of the key => val pairs for the entity
     - `time_created` and `time_updated` <timestamp> indexed -- automatically updated when its respective action is taken on the record
-    - All database columns are explicit, no virtual columns that extra value from the properties
+    - All database columns are explicit, no virtual columns whose values are derived from the properties
 1. While entities (`Node[T]` `Edge[T]`) can be manually created, it is easier to use the constructor functions (`NewNode` `NewEdge`). The only reason they arent private is to allow for extendability
 1. Create your own sqlite instance. Just make sure that you add `?_foreign_keys=true` when creating it.
 
@@ -24,6 +24,7 @@ An opinionated Go SQLite graph database based on [simple-graph](https://github.c
 ## Quickstart
 
 I'm going to show you how to build Twitter using P.Y.T. (see [twitter in examples](/examples/twitter/main.go))
+
 
 > all error handling is omitted
 
@@ -44,11 +45,26 @@ go mod tidy
 
 3. Connect to sqlite and build the schema
 ```go
-db, err := sql.Open("sqlite3", ":memory?_foreign_keys=true")
+db, err := sql.Open("sqlite3", "./twitter.db?_foreign_keys=true")
 err = pyt.BuildSchema(db)
 ```
 
-4. Add some types for nodes and edges (the json tag will be the property name in the database)
+4. Given this basic schema, we'll define some types for nodes and edges (the json tag will be the property name in the database) 
+
+```
+   follows
+   |     |
+   |     |
+   |     |
+   V     |
++--------+----+                     +------------+
+|             |                     |            |
+|             |                     |            |
+|    user     +--------wrote------->|   tweet    |
+|             |                     |            |
+|             |                     |            |
++-------------+                     +------------+               
+```
 
 ```go
 // nodes

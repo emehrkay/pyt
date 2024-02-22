@@ -1,4 +1,4 @@
-package litegraph
+package pyt
 
 import (
 	"database/sql/driver"

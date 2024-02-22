@@ -1,4 +1,4 @@
-package litegraph
+package pyt
 
 import (
 	"database/sql"
@@ -10,12 +10,12 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// BuildTables does the work of scaffoling the database and
+// BuildSchema does the work of scaffoling the database and
 // should be called when the connection is created.
-func BuildTables(db *sql.DB) error {
+func BuildSchema(db *sql.DB) error {
 	queries := []string{
 		`CREATE TABLE IF NOT EXISTS node (
-			id TEXT NOT NULL UNIQUE,
+			id TEXT NOT NULL UNIQUE PRIMARY KEY,
 			active BOOLEAN,
 			type TEXT NOT NULL,
 			properties TEXT,
@@ -52,7 +52,7 @@ func BuildTables(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS time_updated_idx ON node(time_updated);`,
 
 		`CREATE TABLE IF NOT EXISTS edge (
-			id TEXT NOT NULL UNIQUE,
+			id TEXT NOT NULL UNIQUE PRIMARY KEY,
 			active BOOLEAN,
 			type TEXT NOT NULL,
 			in_id TEXT,

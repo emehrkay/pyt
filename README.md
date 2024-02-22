@@ -52,7 +52,7 @@ err = pyt.BuildSchema(db)
 4. Given this basic schema, we'll define some types for nodes and edges (the json tag will be the property name in the database) 
 
 ```
-   follows
+  (follows)
    |     |
    |     |
    |     |
@@ -60,7 +60,7 @@ err = pyt.BuildSchema(db)
 +--------+----+                     +------------+
 |             |                     |            |
 |             |                     |            |
-|    user     +--------wrote------->|   tweet    |
+|    user     +------(wrote)------->|   tweet    |
 |             |                     |            |
 |             |                     |            |
 +-------------+                     +------------+               

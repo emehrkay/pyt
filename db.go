@@ -228,11 +228,17 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 		*
 	`, strings.Join(values, ","))
 
-	res, err := tx.Query(query, params...)
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
+
+	defer res.Close()
 
 	nodes, err := RowsToNode[T](res, tx)
 	if err != nil {
@@ -284,8 +290,16 @@ func NodeUpdate[T any](tx *sql.Tx, updatedNode Node[T], withReturn bool) (*Node[
 
 // NodeGetByID retrieves and typed node by its id
 func NodeGetByID[T any](tx *sql.Tx, id string) (*Node[T], error) {
-	fil := NewFilter("id", id)
-	nodes, err := NodesGetBy[T](tx, &FilterSet{fil})
+	fil := FilterSet{
+		NewFilter("id", id),
+	}
+
+	return NodeGetBy[T](tx, fil)
+}
+
+// NodeGetBy retuns a single typed node by filters
+func NodeGetBy[T any](tx *sql.Tx, filters FilterSet) (*Node[T], error) {
+	nodes, err := NodesGetBy[T](tx, &filters)
 	if err != nil {
 		return nil, err
 	}
@@ -319,11 +333,19 @@ func NodesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*NodeSet[T], error) {
 	%s
 	`, where)
 
-	res, err := tx.Query(query, params...)
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+
+	defer stmt.Close()
+
+	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
 
 	}
+	defer res.Close()
 
 	nodes, err := RowsToNode[T](res, tx)
 	if err != nil {
@@ -388,11 +410,20 @@ func NodesGetRelatedBy(tx *sql.Tx, nodeID, direction, edgeType string, filters *
 		e.type = ?
 	`, edgeJoin, edgeWhere)
 
-	rows, err := tx.Query(query, params...)
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+
+	defer stmt.Close()
+
+	rows, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
 
 	}
+
+	defer rows.Close()
 
 	var resp GenericEdgeNodeSet
 
@@ -464,12 +495,20 @@ func EdgesCreate[T any](tx *sql.Tx, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 	RETURNING
 		*
 	`, strings.Join(values, ","))
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
 
-	res, err := tx.Query(query, params...)
+	defer stmt.Close()
+
+	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
 
 	}
+
+	defer res.Close()
 
 	edges, err := RowsToEdge[T](res, tx)
 	if err != nil {
@@ -519,10 +558,18 @@ func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[
 	return edge, nil
 }
 
-// EdgeGetByID will return an edge by its id
+// EdgeGetByID will return a typed edge by its id
 func EdgeGetByID[T any](tx *sql.Tx, id string) (*Edge[T], error) {
-	fil := NewFilter("id", id)
-	edges, err := EdgesGetBy[T](tx, &FilterSet{fil})
+	fil := FilterSet{
+		NewFilter("id", id),
+	}
+
+	return EdgeGetBy[T](tx, fil)
+}
+
+// EdgeGetByID will return a single typed edge by its id
+func EdgeGetBy[T any](tx *sql.Tx, filters FilterSet) (*Edge[T], error) {
+	edges, err := EdgesGetBy[T](tx, &filters)
 	if err != nil {
 		return nil, err
 	}
@@ -555,12 +602,19 @@ func EdgesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*EdgeSet[T], error) {
 		edge
 	%s
 	`, where)
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
 
-	res, err := tx.Query(query, params...)
+	defer stmt.Close()
+
+	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
 
 	}
+	defer res.Close()
 
 	edges, err := RowsToEdge[T](res, tx)
 	if err != nil {

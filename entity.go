@@ -77,9 +77,60 @@ func PropertiesToType[T any](properties []byte) (*T, error) {
 	return entity, err
 }
 
+type TypedNodeEdgeSet[NodeType any, EdgeType any] []TypedNodeEdge[NodeType, EdgeType]
+
+func (ty TypedNodeEdgeSet[NodeType, EdgeType]) Nodes() *NodeSet[NodeType] {
+	set := make(NodeSet[NodeType], len(ty))
+
+	for i, t := range ty {
+		set[i] = *t.Node
+	}
+
+	return &set
+}
+
+func (ty TypedNodeEdgeSet[NodeType, EdgeType]) Edges() *EdgeSet[EdgeType] {
+	set := make(EdgeSet[EdgeType], len(ty))
+
+	for i, t := range ty {
+		set[i] = *t.Edge
+	}
+
+	return &set
+}
+
+type TypedNodeEdge[NodeType any, EdgeType any] struct {
+	Node *Node[NodeType]
+	Edge *Edge[EdgeType]
+}
+
 type GenericNode Node[GenericProperties]
 type GenericEdge Edge[GenericProperties]
 type GenericEdgeNodeSet []GenericEdgeNode
+
+func GenericEdgeNodeSetToTypes[NodeType any, EdgeType any](set GenericEdgeNodeSet) (*TypedNodeEdgeSet[NodeType, EdgeType], error) {
+	res := TypedNodeEdgeSet[NodeType, EdgeType]{}
+
+	for _, s := range set {
+		node, err := GenericNodeToType[NodeType](s.GenericNode)
+		if err != nil {
+			return nil, err
+		}
+
+		edge, err := GenericEdgeToType[EdgeType](s.GenericEdge)
+		if err != nil {
+			return nil, err
+		}
+
+		res = append(res, TypedNodeEdge[NodeType, EdgeType]{
+			Node: node,
+			Edge: edge,
+		})
+	}
+
+	return &res, nil
+}
+
 type GenericEdgeNode struct {
 	GenericEdge
 	GenericNode

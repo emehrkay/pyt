@@ -10,48 +10,54 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+var (
+	NodeTableName string = "node"
+	EdgeTableName string = "edge"
+	timeFormat    string = "'%Y-%m-%d %H:%M:%f'"
+)
+
 // BuildSchema does the work of scaffoling the database and
 // should be called when the connection is created.
 func BuildSchema(db *sql.DB) error {
 	queries := []string{
-		`CREATE TABLE IF NOT EXISTS node (
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
 			active BOOLEAN,
 			type TEXT NOT NULL,
 			properties TEXT,
 			time_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			time_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);`,
+		);`, NodeTableName),
 
-		`CREATE TRIGGER IF NOT EXISTS node_time_created_trigger
-		AFTER INSERT ON node
+		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_created_trigger
+		AFTER INSERT ON %[1]s
 		BEGIN
 			UPDATE
-				node 
+				%[1]s 
 			SET 
-				time_created = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
+				time_created = STRFTIME(%[2]s, 'NOW')
 			WHERE id = NEW.id;
-		END;`,
+		END;`, NodeTableName, timeFormat),
 
-		`CREATE TRIGGER IF NOT EXISTS node_time_updated_trigger
-		AFTER UPDATE ON node
+		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_updated_trigger
+		AFTER UPDATE ON %[1]s
 		BEGIN
 			UPDATE
-				node 
+				 %[1]s
 			SET 
-				time_updated = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
+				time_updated = STRFTIME(%[2]s, 'NOW')
 			WHERE id = NEW.id;
-		END;`,
+		END;`, NodeTableName, timeFormat),
 
-		`CREATE INDEX IF NOT EXISTS id_idx ON node(id);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS id_idx ON %s(id);`, NodeTableName),
 
-		`CREATE INDEX IF NOT EXISTS type_idx ON node(type);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS type_idx ON %s(type);`, NodeTableName),
 
-		`CREATE INDEX IF NOT EXISTS time_created_idx ON node(time_created);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_created_idx ON %s(time_created);`, NodeTableName),
 
-		`CREATE INDEX IF NOT EXISTS time_updated_idx ON node(time_updated);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_updated_idx ON %s(time_updated);`, NodeTableName),
 
-		`CREATE TABLE IF NOT EXISTS edge (
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
 			active BOOLEAN,
 			type TEXT NOT NULL,
@@ -61,39 +67,39 @@ func BuildSchema(db *sql.DB) error {
 			time_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			time_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			UNIQUE(in_id, out_id, properties) ON CONFLICT REPLACE,
-			FOREIGN KEY(in_id) REFERENCES node(id),
-			FOREIGN KEY(out_id) REFERENCES node(id)
-		);`,
+			FOREIGN KEY(in_id) REFERENCES %[2]s(id) ON DELETE CASCADE,
+			FOREIGN KEY(out_id) REFERENCES %[2]s(id) ON DELETE CASCADE
+		);`, EdgeTableName, NodeTableName),
 
-		`CREATE INDEX IF NOT EXISTS in_id_idx ON edge(in_id);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS in_id_idx ON %s(in_id);`, EdgeTableName),
 
-		`CREATE INDEX IF NOT EXISTS out_id_idx ON edge(out_id);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS out_id_idx ON %s(out_id);`, EdgeTableName),
 
-		`CREATE INDEX IF NOT EXISTS type_idx ON edge(type);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS type_idx ON %s(type);`, EdgeTableName),
 
-		`CREATE INDEX IF NOT EXISTS time_created_idx ON edge(time_created);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_created_idx ON %s(time_created);`, EdgeTableName),
 
-		`CREATE INDEX IF NOT EXISTS time_updated_idx ON edge(time_updated);`,
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_updated_idx ON %s(time_updated);`, EdgeTableName),
 
-		`CREATE TRIGGER IF NOT EXISTS edge_time_created_trigger
-		AFTER INSERT ON edge
+		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_created_trigger
+		AFTER INSERT ON %[1]s
 		BEGIN
 			UPDATE
-				edge 
+				%[1]s 
 			SET 
-				time_created = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
+				time_created = STRFTIME(%[2]s, 'NOW')
 			WHERE id = NEW.id;
-		END;`,
+		END;`, EdgeTableName, timeFormat),
 
-		`CREATE TRIGGER IF NOT EXISTS edge_time_updated_trigger
-		AFTER UPDATE ON edge
+		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_updated_trigger
+		AFTER UPDATE ON %[1]s
 		BEGIN
 			UPDATE
-				edge 
+				%[1]s 
 			SET 
-				time_updated = STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')
+				time_updated = STRFTIME(%[2]s, 'NOW')
 			WHERE id = NEW.id;
-		END;`,
+		END;`, EdgeTableName, timeFormat),
 	}
 
 	tx, err := db.Begin()
@@ -220,13 +226,13 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 
 	query := fmt.Sprintf(`
 	INSERT INTO
-		node
+		%s
 		(id, active, type, properties)
 	VALUES
 		%s
 	RETURNING
 		*
-	`, strings.Join(values, ","))
+	`, NodeTableName, strings.Join(values, ","))
 
 	stmt, err := tx.Prepare(query)
 	if err != nil {
@@ -253,9 +259,9 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 func NodeUpdate[T any](tx *sql.Tx, updatedNode Node[T], withReturn bool) (*Node[T], error) {
 	var err error
 
-	query := `
+	query := fmt.Sprintf(`
 	UPDATE
-		node
+		%s
 	SET
 		active = ?,
 		properties = ?
@@ -263,7 +269,7 @@ func NodeUpdate[T any](tx *sql.Tx, updatedNode Node[T], withReturn bool) (*Node[
 		id = ?
 	RETURNING
 		*
-	`
+	`, NodeTableName)
 	properties, err := json.Marshal(updatedNode.Properties)
 	if err != nil {
 		return nil, err
@@ -329,9 +335,9 @@ func NodesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*NodeSet[T], error) {
 	SELECT
 		*
 	FROM
-		node
+		%s
 	%s
-	`, where)
+	`, NodeTableName, where)
 
 	stmt, err := tx.Prepare(query)
 	if err != nil {
@@ -401,14 +407,14 @@ func NodesGetRelatedBy(tx *sql.Tx, nodeID, direction, edgeType string, filters *
 		n.time_created as node_time_created,
 		n.time_updated as node_time_updated
 	FROM
-		edge e
+		%s e
 	JOIN
-		node n ON n.id = e.%s
+		%s n ON n.id = e.%s
 	WHERE
 		e.%s = ?
 	AND
 		e.type = ?
-	`, edgeJoin, edgeWhere)
+	`, EdgeTableName, NodeTableName, edgeJoin, edgeWhere)
 
 	stmt, err := tx.Prepare(query)
 	if err != nil {
@@ -488,13 +494,13 @@ func EdgesCreate[T any](tx *sql.Tx, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 
 	query := fmt.Sprintf(`
 	INSERT INTO
-		edge
+		%s
 		(id, active, type, in_id, out_id, properties)
 	VALUES
 		%s
 	RETURNING
 		*
-	`, strings.Join(values, ","))
+	`, EdgeTableName, strings.Join(values, ","))
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return nil, err
@@ -523,9 +529,9 @@ func EdgesCreate[T any](tx *sql.Tx, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[T], error) {
 	var err error
 
-	query := `
+	query := fmt.Sprintf(`
 	UPDATE
-		edge
+		%s
 	SET
 		active = ?,
 		properties = ?
@@ -533,7 +539,7 @@ func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[
 		id = ?
 	RETURNING
 		*
-	`
+	`, EdgeTableName)
 	properties, err := json.Marshal(updatedEdge.Properties)
 	if err != nil {
 		return nil, err
@@ -599,9 +605,9 @@ func EdgesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*EdgeSet[T], error) {
 	SELECT
 		*
 	FROM
-		edge
+		%s
 	%s
-	`, where)
+	`, EdgeTableName, where)
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return nil, err

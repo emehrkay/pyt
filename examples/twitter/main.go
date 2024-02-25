@@ -13,6 +13,11 @@ import (
 	"github.com/emehrkay/pyt"
 )
 
+func init() {
+	pyt.NodeTableName = "node_xxx_yyy"
+	pyt.EdgeTableName = "anything_but_the_e_word"
+}
+
 // nodes
 type User struct {
 	Username string `json:"username"`
@@ -51,7 +56,7 @@ func main() {
 	}
 
 	// let's make the username unique for user types
-	query := `CREATE UNIQUE INDEX IF NOT EXISTS user_username_idx ON node(type, json_extract(properties, '$.username')) WHERE type = 'user'`
+	query := fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS user_username_idx ON %s(type, json_extract(properties, '$.username')) WHERE type = 'user'`, pyt.NodeTableName)
 	_, err = db.Exec(query)
 	if err != nil {
 		p(`unable to add unique user constraint`, err)
@@ -153,7 +158,7 @@ func (ft FollowersTweets) WriteTable() {
 }
 
 func getFollingTweets(tx *sql.Tx, userID string) (*FollowersTweets, error) {
-	query := `
+	query := fmt.Sprintf(`
 	SELECT
 		json_extract(follows.properties, '$.username') as author,
 		follows.id as author_id,
@@ -161,13 +166,13 @@ func getFollingTweets(tx *sql.Tx, userID string) (*FollowersTweets, error) {
 		json_extract(tweet.properties, '$.body') as tweet,
 		tweet.time_created as date
 	FROM
-		edge e
+		%[1]s e
 	JOIN
-		node follows ON follows.id = e.out_id
+		%[2]s follows ON follows.id = e.out_id
 	JOIN
-		edge wrote ON wrote.in_id = follows.id
+		%[1]s wrote ON wrote.in_id = follows.id
 	JOIN
-		node tweet ON tweet.id = wrote.out_id
+		%[2]s tweet ON tweet.id = wrote.out_id
 	WHERE
 		e.in_id = ?
 	AND
@@ -176,7 +181,7 @@ func getFollingTweets(tx *sql.Tx, userID string) (*FollowersTweets, error) {
 		wrote.type = 'wrote'
 	ORDER BY
 		tweet.time_created DESC
-	`
+	`, pyt.EdgeTableName, pyt.NodeTableName)
 	rows, err := tx.Query(query, userID)
 	if err != nil {
 		p(`unable to get followers' tweets`, err)

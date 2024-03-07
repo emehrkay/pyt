@@ -22,12 +22,12 @@ func BuildSchema(db *sql.DB) error {
 	queries := []string{
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
-			active BOOLEAN,
+			active INTEGER,
 			type TEXT NOT NULL,
 			properties TEXT,
 			time_created TEXT NOT NULL DEFAULT (strftime(%[2]s)),
 			time_updated TEXT NOT NULL DEFAULT (strftime(%[2]s))
-		);`, NodeTableName, timeFormat),
+		) strict;`, NodeTableName, timeFormat),
 
 		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_updated_trigger
 		AFTER UPDATE ON %[1]s
@@ -49,7 +49,7 @@ func BuildSchema(db *sql.DB) error {
 
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
-			active BOOLEAN,
+			active INTEGER,
 			type TEXT NOT NULL,
 			in_id TEXT,
 			out_id TEXT,
@@ -59,7 +59,7 @@ func BuildSchema(db *sql.DB) error {
 			UNIQUE(in_id, out_id, properties) ON CONFLICT REPLACE,
 			FOREIGN KEY(in_id) REFERENCES %[2]s(id) ON DELETE CASCADE,
 			FOREIGN KEY(out_id) REFERENCES %[2]s(id) ON DELETE CASCADE
-		);`, EdgeTableName, NodeTableName, timeFormat),
+		) strict;`, EdgeTableName, NodeTableName, timeFormat),
 
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS in_id_idx ON %s(in_id);`, EdgeTableName),
 

@@ -33,11 +33,8 @@ type Follows struct{}
 type Wrote struct{}
 
 func main() {
-	// use this if you want to save to an actual file
-	path := "twitter.db"
-	os.Remove(path)
-
-	path = path + "?_foreign_keys=true"
+	path := uuid.NewString()
+	path = path + "?_foreign_keys=true&cache=shared&mode=memory"
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		p(`cannot create db`, err)
@@ -61,8 +58,6 @@ func main() {
 	if err != nil {
 		p(`unable to add unique user constraint`, err)
 	}
-	tx.Commit()
-	tx, _ = db.Begin()
 
 	// add some users
 	mark := pyt.NewNode(uuid.NewString(), "user", User{
@@ -78,8 +73,6 @@ func main() {
 	if err != nil {
 		p(`cannot create users`, err)
 	}
-	tx.Commit()
-	tx, _ = db.Begin()
 
 	// followers
 	mk := pyt.NewEdge(uuid.NewString(), "follows", mark.ID, kram.ID, Follows{})
@@ -90,8 +83,6 @@ func main() {
 	if err != nil {
 		p(`cannot save followers`, err)
 	}
-	tx.Commit()
-	tx, _ = db.Begin()
 
 	// add some tweets
 	for x, user := range *users {
@@ -121,14 +112,13 @@ func main() {
 			}
 		}
 	}
-	tx.Commit()
-	tx, _ = db.Begin()
 
 	// get some data
 	timeline, err := getFollingTweets(tx, you.ID)
 	if err != nil {
 		p("cant load timeline", err)
 	}
+
 	tx.Commit()
 	timeline.WriteTable()
 }

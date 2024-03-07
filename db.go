@@ -13,31 +13,21 @@ import (
 var (
 	NodeTableName string = "node"
 	EdgeTableName string = "edge"
-	timeFormat    string = "'%Y-%m-%d %H:%M:%f'"
+	timeFormat    string = "'%Y-%m-%dT%H:%M:%fZ'"
 )
 
 // BuildSchema does the work of scaffoling the database and
 // should be called when the connection is created.
 func BuildSchema(db *sql.DB) error {
 	queries := []string{
-		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
 			active BOOLEAN,
 			type TEXT NOT NULL,
 			properties TEXT,
-			time_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			time_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);`, NodeTableName),
-
-		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_created_trigger
-		AFTER INSERT ON %[1]s
-		BEGIN
-			UPDATE
-				%[1]s 
-			SET 
-				time_created = STRFTIME(%[2]s, 'NOW')
-			WHERE id = NEW.id;
-		END;`, NodeTableName, timeFormat),
+			time_created TEXT NOT NULL DEFAULT (strftime(%[2]s)),
+			time_updated TEXT NOT NULL DEFAULT (strftime(%[2]s))
+		);`, NodeTableName, timeFormat),
 
 		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_updated_trigger
 		AFTER UPDATE ON %[1]s
@@ -64,12 +54,12 @@ func BuildSchema(db *sql.DB) error {
 			in_id TEXT,
 			out_id TEXT,
 			properties TEXT,
-			time_created TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			time_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			time_created TEXT NOT NULL DEFAULT (strftime(%[3]s)),
+			time_updated TEXT NOT NULL DEFAULT (strftime(%[3]s)),
 			UNIQUE(in_id, out_id, properties) ON CONFLICT REPLACE,
 			FOREIGN KEY(in_id) REFERENCES %[2]s(id) ON DELETE CASCADE,
 			FOREIGN KEY(out_id) REFERENCES %[2]s(id) ON DELETE CASCADE
-		);`, EdgeTableName, NodeTableName),
+		);`, EdgeTableName, NodeTableName, timeFormat),
 
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS in_id_idx ON %s(in_id);`, EdgeTableName),
 
@@ -80,16 +70,6 @@ func BuildSchema(db *sql.DB) error {
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_created_idx ON %s(time_created);`, EdgeTableName),
 
 		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_updated_idx ON %s(time_updated);`, EdgeTableName),
-
-		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_created_trigger
-		AFTER INSERT ON %[1]s
-		BEGIN
-			UPDATE
-				%[1]s 
-			SET 
-				time_created = STRFTIME(%[2]s, 'NOW')
-			WHERE id = NEW.id;
-		END;`, EdgeTableName, timeFormat),
 
 		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_updated_trigger
 		AFTER UPDATE ON %[1]s

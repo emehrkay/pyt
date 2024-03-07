@@ -138,7 +138,7 @@ type FollowersTweet struct {
 	author_id string
 	tweet_id  string
 	tweet     string
-	date      time.Time
+	date      pyt.Time
 }
 
 type FollowersTweets []FollowersTweet

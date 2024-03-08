@@ -22,7 +22,7 @@ func BuildSchema(db *sql.DB) error {
 	queries := []string{
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
-			active INTEGER,
+			active INTEGER DEFAULT 1,
 			type TEXT NOT NULL,
 			properties TEXT,
 			time_created TEXT NOT NULL DEFAULT (strftime(%[2]s)),
@@ -49,7 +49,7 @@ func BuildSchema(db *sql.DB) error {
 
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
-			active INTEGER,
+			active INTEGER DEFAULT 1,
 			type TEXT NOT NULL,
 			in_id TEXT,
 			out_id TEXT,

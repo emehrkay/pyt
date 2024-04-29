@@ -14,6 +14,8 @@ var (
 	NodeTableName string = "node"
 	EdgeTableName string = "edge"
 	timeFormat    string = "'%Y-%m-%dT%H:%M:%fZ'"
+
+	ErrBadUpsertQuery error = errors.New("bad upsert query")
 )
 
 // BuildSchema does the work of scaffoling the database and
@@ -213,6 +215,105 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 	RETURNING
 		*
 	`, NodeTableName, strings.Join(values, ","))
+
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := stmt.Query(params...)
+	if err != nil {
+		return nil, errors.Join(err, tx.Rollback())
+	}
+
+	defer res.Close()
+
+	nodes, err := RowsToNode[T](res, tx)
+	if err != nil {
+		return nil, errors.Join(err, tx.Rollback())
+
+	}
+
+	return nodes, nil
+}
+
+// NodeUpsert will execute an upsert query based on the conflictColumns and the
+// conflictCluase values
+//
+// ex:
+// you have unique constraint on a "user" node's username that looks like:
+//
+// CREATE UNIQUE INDEX IF NOT EXISTS
+// user_username_idx
+// ON
+// node(type, properties->'username')
+// WHERE
+// type = 'user'
+//
+// you would pass in "type, properties->'username'" as the conflictColumns
+// and, in this case, "type='user'" as the conflictClause
+func NodeUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string, newNode Node[T]) (*Node[T], error) {
+	nodes, err := NodesUpsert[T](tx, conflictColumns, conflictClause, newNode)
+	if err != nil {
+		return nil, err
+	}
+
+	if nodes == nil || len(*nodes) == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	return nodes.First(), nil
+}
+
+// NodesUpsert will execute an upsert query based on the conflictColumns and the
+// conflictCluase values
+//
+// ex:
+// you have unique constraint on a "user" node's username that looks like:
+//
+// CREATE UNIQUE INDEX IF NOT EXISTS
+// user_username_idx
+// ON
+// node(type, properties->'username')
+// WHERE
+// type = 'user'
+//
+// you would pass in "type, properties->'username'" as the conflicedColumns
+// and, in this case, "type='user'" as the conflictClause
+func NodesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string, newNodes ...Node[T]) (*NodeSet[T], error) {
+	if len(conflictColumns) == 0 {
+		return nil, ErrBadUpsertQuery
+	}
+
+	var err error
+	values := make([]string, len(newNodes))
+	params := []any{}
+
+	for i := 0; i < len(newNodes); i++ {
+		values[i] = "(?, ?, ?, ?)"
+		properties, err := json.Marshal(newNodes[i].Properties)
+		if err != nil {
+			return nil, err
+		}
+		params = append(params, newNodes[i].entity.ID, newNodes[i].entity.Active, newNodes[i].entity.Type, string(properties))
+	}
+
+	if strings.TrimSpace(conflictClause) != "" {
+		conflictClause = "WHERE " + conflictClause
+	}
+
+	query := fmt.Sprintf(`
+	INSERT INTO
+		%s
+		(id, active, type, properties)
+	VALUES
+		%s
+	ON CONFLICT (%s) %s DO UPDATE SET
+		active = excluded.active,
+		properties = excluded.properties
+	RETURNING
+		*
+	`, NodeTableName, strings.Join(values, ","), conflictColumns, conflictClause)
 
 	stmt, err := tx.Prepare(query)
 	if err != nil {
@@ -542,6 +643,80 @@ func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[
 	}
 
 	return edge, nil
+}
+
+func EdgeUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string, newEdge Edge[T]) (*Edge[T], error) {
+	edges, err := EdgesUpsert[T](tx, conflictColumns, conflictClause, newEdge)
+	if err != nil {
+		return nil, err
+	}
+
+	if edges == nil || len(*edges) == 0 {
+		return nil, sql.ErrNoRows
+	}
+
+	return edges.First(), nil
+}
+
+// EdgesUpsert will execute an upsert query based on the conflictColumns and the
+// conflictCluase values
+func EdgesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string, newEdges ...Edge[T]) (*EdgeSet[T], error) {
+	if len(conflictColumns) == 0 {
+		return nil, ErrBadUpsertQuery
+	}
+
+	var err error
+	values := make([]string, len(newEdges))
+	params := []any{}
+
+	for i := 0; i < len(newEdges); i++ {
+		values[i] = "(?, ?, ?, ?, ?, ?)"
+		properties, err := json.Marshal(newEdges[i].Properties)
+		if err != nil {
+			return nil, err
+		}
+
+		params = append(params, newEdges[i].entity.ID, newEdges[i].entity.Active, newEdges[i].entity.Type, newEdges[i].InID, newEdges[i].OutID, string(properties))
+	}
+
+	if strings.TrimSpace(conflictClause) != "" {
+		conflictClause = "WHERE " + conflictClause
+	}
+
+	query := fmt.Sprintf(`
+		INSERT INTO
+			%s
+			(id, active, type, in_id, out_id, properties)
+		VALUES
+			%s
+		ON CONFLICT (%s) %s DO UPDATE SET
+			active = excluded.active,
+			properties = excluded.properties
+		RETURNING
+			*
+		`, EdgeTableName, strings.Join(values, ","), conflictColumns, conflictClause)
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+
+	defer stmt.Close()
+
+	res, err := stmt.Query(params...)
+	if err != nil {
+		return nil, errors.Join(err, tx.Rollback())
+
+	}
+
+	defer res.Close()
+
+	edges, err := RowsToEdge[T](res, tx)
+	if err != nil {
+		return nil, errors.Join(err, tx.Rollback())
+
+	}
+
+	return edges, nil
 }
 
 // EdgeGetByID will return a typed edge by its id

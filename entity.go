@@ -17,12 +17,44 @@ type entity struct {
 
 type NodeSet[T any] []Node[T]
 
+func (ns NodeSet[T]) First() *Node[T] {
+	if len(ns) > 0 {
+		return &ns[0]
+	}
+
+	return nil
+}
+
+func (ns NodeSet[T]) Last() *Node[T] {
+	if len(ns) > 0 {
+		return &ns[len(ns)-1]
+	}
+
+	return nil
+}
+
 type Node[T any] struct {
 	entity
 	Properties T
 }
 
 type EdgeSet[T any] []Edge[T]
+
+func (es EdgeSet[T]) First() *Edge[T] {
+	if len(es) > 0 {
+		return &es[0]
+	}
+
+	return nil
+}
+
+func (es EdgeSet[T]) Last() *Edge[T] {
+	if len(es) > 0 {
+		return &es[len(es)-1]
+	}
+
+	return nil
+}
 
 type Edge[T any] struct {
 	entity

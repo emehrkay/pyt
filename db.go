@@ -220,6 +220,7 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 	if err != nil {
 		return nil, err
 	}
+	defer stmt.Close()
 
 	res, err := stmt.Query(params...)
 	if err != nil {
@@ -231,7 +232,6 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 	nodes, err := RowsToNode[T](res, tx)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	return nodes, nil
@@ -320,6 +320,8 @@ func NodesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause strin
 		return nil, err
 	}
 
+	defer stmt.Close()
+
 	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
@@ -330,7 +332,6 @@ func NodesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause strin
 	nodes, err := RowsToNode[T](res, tx)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	return nodes, nil
@@ -369,7 +370,6 @@ func NodeUpdate[T any](tx *sql.Tx, updatedNode Node[T], withReturn bool) (*Node[
 	node, err := NodeGetByID[T](tx, updatedNode.ID)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	return node, nil
@@ -430,14 +430,13 @@ func NodesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*NodeSet[T], error) {
 	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
+
 	defer res.Close()
 
 	nodes, err := RowsToNode[T](res, tx)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	return nodes, nil
@@ -507,7 +506,6 @@ func NodesGetRelatedBy(tx *sql.Tx, nodeID, direction, edgeType string, filters *
 	rows, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	defer rows.Close()
@@ -592,7 +590,6 @@ func EdgesCreate[T any](tx *sql.Tx, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	defer res.Close()
@@ -600,7 +597,6 @@ func EdgesCreate[T any](tx *sql.Tx, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 	edges, err := RowsToEdge[T](res, tx)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	return edges, nil
@@ -629,7 +625,6 @@ func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[
 	_, err = tx.Exec(query, updatedEdge.entity.Active, string(properties), updatedEdge.ID)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	if !withReturn {
@@ -639,7 +634,6 @@ func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[
 	edge, err := EdgeGetByID[T](tx, updatedEdge.ID)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	return edge, nil
@@ -705,7 +699,6 @@ func EdgesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause strin
 	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	defer res.Close()
@@ -713,7 +706,6 @@ func EdgesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause strin
 	edges, err := RowsToEdge[T](res, tx)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	return edges, nil
@@ -773,14 +765,13 @@ func EdgesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*EdgeSet[T], error) {
 	res, err := stmt.Query(params...)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
+
 	defer res.Close()
 
 	edges, err := RowsToEdge[T](res, tx)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	return edges, nil

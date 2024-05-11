@@ -14,13 +14,14 @@ import (
 )
 
 func init() {
-	pyt.NodeTableName = "node_xxx_yyy"
-	pyt.EdgeTableName = "anything_but_the_e_word"
+	// pyt.NodeTableName = "node_xxx_yyy"
+	// pyt.EdgeTableName = "anything_but_the_e_word"
 }
 
 // nodes
 type User struct {
 	Username string `json:"username"`
+	Loc      string `json:"loc"`
 }
 
 type Tweet struct {
@@ -33,8 +34,7 @@ type Follows struct{}
 type Wrote struct{}
 
 func main() {
-	path := uuid.NewString()
-	path = path + "?_foreign_keys=true&cache=shared&mode=memory"
+	path := "file::memory:?cache=shared"
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		p(`cannot create db`, err)
@@ -52,17 +52,39 @@ func main() {
 		p(`cannot build tables`, err)
 	}
 
+	trunk := []string{
+		"DELETE FROM node",
+		"DELETE FROM edge",
+	}
+	for _, t := range trunk {
+		_, err = db.Exec(t)
+		if err != nil {
+			p(`unable to truncate`, err)
+		}
+	}
+
 	// let's make the username unique for user types
-	query := fmt.Sprintf(`CREATE UNIQUE INDEX IF NOT EXISTS user_username_idx ON %s(type, json_extract(properties, '$.username')) WHERE type = 'user'`, pyt.NodeTableName)
-	_, err = db.Exec(query)
-	if err != nil {
-		p(`unable to add unique user constraint`, err)
+	indexes := []string{
+		"DROP INDEX IF EXISTS user_username_idx",
+		`CREATE UNIQUE INDEX IF NOT EXISTS 
+			user_username_idx 
+		ON 
+			node(type, properties->'username') 
+		WHERE 
+			type = 'user'`,
+	}
+	for _, query := range indexes {
+		_, err = db.Exec(query)
+		if err != nil {
+			p(`unable to add unique user constraint`, err)
+		}
 	}
 
 	// add some users
 	mark := pyt.NewNode(uuid.NewString(), "user", User{
 		Username: "mark",
 	})
+
 	kram := pyt.NewNode(uuid.NewString(), "user", User{
 		Username: "kram",
 	})
@@ -73,6 +95,19 @@ func main() {
 	if err != nil {
 		p(`cannot create users`, err)
 	}
+	tx.Commit()
+	tx, _ = db.Begin()
+
+	//upsert mark
+	markup := pyt.NewNode(uuid.NewString(), "user", User{
+		Username: "mark",
+		Loc:      "some loc",
+	})
+	up, err := pyt.NodeUpsert(tx, "type, properties->'username'", "type='user'", *markup)
+	tx.Commit()
+	fmt.Println(up, err)
+	tx, _ = db.Begin()
+	defer tx.Commit()
 
 	// followers
 	mk := pyt.NewEdge(uuid.NewString(), "follows", mark.ID, kram.ID, Follows{})
@@ -171,7 +206,7 @@ func getFollingTweets(tx *sql.Tx, userID string) (*FollowersTweets, error) {
 		wrote.type = 'wrote'
 	ORDER BY
 		tweet.time_created DESC
-	`, pyt.EdgeTableName, pyt.NodeTableName)
+	`, pyt.DefaultEdgeTableName, pyt.DefaultNodeTableName)
 	rows, err := tx.Query(query, userID)
 	if err != nil {
 		p(`unable to get followers' tweets`, err)

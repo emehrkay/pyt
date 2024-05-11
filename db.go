@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	NodeTableName string = "node"
-	EdgeTableName string = "edge"
-	timeFormat    string = "'%Y-%m-%dT%H:%M:%fZ'"
+	DefaultNodeTableName string = "node"
+	DefaultEdgeTableName string = "edge"
+	timeFormat           string = "'%Y-%m-%dT%H:%M:%fZ'"
 
 	ErrBadUpsertQuery error = errors.New("bad upsert query")
 )
@@ -21,6 +21,10 @@ var (
 // BuildSchema does the work of scaffoling the database and
 // should be called when the connection is created.
 func BuildSchema(db *sql.DB) error {
+	return BuildSchemaWithTableNames(db, DefaultEdgeTableName, DefaultNodeTableName)
+}
+
+func BuildSchemaWithTableNames(db *sql.DB, edgeTableName, nodeTableName string) error {
 	queries := []string{
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
@@ -29,7 +33,7 @@ func BuildSchema(db *sql.DB) error {
 			properties TEXT,
 			time_created TEXT NOT NULL DEFAULT (strftime(%[2]s)),
 			time_updated TEXT NOT NULL DEFAULT (strftime(%[2]s))
-		) strict;`, NodeTableName, timeFormat),
+		) strict;`, nodeTableName, timeFormat),
 
 		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_updated_trigger
 		AFTER UPDATE ON %[1]s
@@ -39,15 +43,15 @@ func BuildSchema(db *sql.DB) error {
 			SET 
 				time_updated = STRFTIME(%[2]s, 'NOW')
 			WHERE id = NEW.id;
-		END;`, NodeTableName, timeFormat),
+		END;`, nodeTableName, timeFormat),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS id_idx ON %s(id);`, NodeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS id_idx ON %s(id);`, nodeTableName),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS type_idx ON %s(type);`, NodeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS type_idx ON %s(type);`, nodeTableName),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_created_idx ON %s(time_created);`, NodeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_created_idx ON %s(time_created);`, nodeTableName),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_updated_idx ON %s(time_updated);`, NodeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_updated_idx ON %s(time_updated);`, nodeTableName),
 
 		fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %[1]s (
 			id TEXT NOT NULL UNIQUE PRIMARY KEY,
@@ -61,17 +65,17 @@ func BuildSchema(db *sql.DB) error {
 			UNIQUE(in_id, out_id, properties) ON CONFLICT REPLACE,
 			FOREIGN KEY(in_id) REFERENCES %[2]s(id) ON DELETE CASCADE,
 			FOREIGN KEY(out_id) REFERENCES %[2]s(id) ON DELETE CASCADE
-		) strict;`, EdgeTableName, NodeTableName, timeFormat),
+		) strict;`, edgeTableName, nodeTableName, timeFormat),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS in_id_idx ON %s(in_id);`, EdgeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS in_id_idx ON %s(in_id);`, edgeTableName),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS out_id_idx ON %s(out_id);`, EdgeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS out_id_idx ON %s(out_id);`, edgeTableName),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS type_idx ON %s(type);`, EdgeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS type_idx ON %s(type);`, edgeTableName),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_created_idx ON %s(time_created);`, EdgeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_created_idx ON %s(time_created);`, edgeTableName),
 
-		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_updated_idx ON %s(time_updated);`, EdgeTableName),
+		fmt.Sprintf(`CREATE INDEX IF NOT EXISTS time_updated_idx ON %s(time_updated);`, edgeTableName),
 
 		fmt.Sprintf(`CREATE TRIGGER IF NOT EXISTS %[1]s_time_updated_trigger
 		AFTER UPDATE ON %[1]s
@@ -81,7 +85,7 @@ func BuildSchema(db *sql.DB) error {
 			SET 
 				time_updated = STRFTIME(%[2]s, 'NOW')
 			WHERE id = NEW.id;
-		END;`, EdgeTableName, timeFormat),
+		END;`, edgeTableName, timeFormat),
 	}
 
 	tx, err := db.Begin()
@@ -178,7 +182,11 @@ func RowsToEdge[T any](rows *sql.Rows, tx *sql.Tx) (*EdgeSet[T], error) {
 
 // NodeCreate will add a node to the database
 func NodeCreate[T any](tx *sql.Tx, newNode Node[T]) (*Node[T], error) {
-	nodes, err := NodesCreate(tx, newNode)
+	return NodeCreateWithTableName[T](tx, DefaultNodeTableName, newNode)
+}
+
+func NodeCreateWithTableName[T any](tx *sql.Tx, nodeTableName string, newNode Node[T]) (*Node[T], error) {
+	nodes, err := NodesCreateWithTableName(tx, nodeTableName, newNode)
 	if err != nil {
 		return nil, err
 	}
@@ -192,6 +200,10 @@ func NodeCreate[T any](tx *sql.Tx, newNode Node[T]) (*Node[T], error) {
 
 // NodesCreate will add mulitple nodes to the database
 func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
+	return NodesCreateWithTableName[T](tx, DefaultNodeTableName, newNodes...)
+}
+
+func NodesCreateWithTableName[T any](tx *sql.Tx, nodeTableName string, newNodes ...Node[T]) (*NodeSet[T], error) {
 	var err error
 
 	values := make([]string, len(newNodes))
@@ -214,7 +226,7 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 		%s
 	RETURNING
 		*
-	`, NodeTableName, strings.Join(values, ","))
+	`, nodeTableName, strings.Join(values, ","))
 
 	stmt, err := tx.Prepare(query)
 	if err != nil {
@@ -235,6 +247,7 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 	}
 
 	return nodes, nil
+
 }
 
 // NodeUpsert will execute an upsert query based on the conflictColumns and the
@@ -253,7 +266,11 @@ func NodesCreate[T any](tx *sql.Tx, newNodes ...Node[T]) (*NodeSet[T], error) {
 // you would pass in "type, properties->'username'" as the conflictColumns
 // and, in this case, "type='user'" as the conflictClause
 func NodeUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string, newNode Node[T]) (*Node[T], error) {
-	nodes, err := NodesUpsert[T](tx, conflictColumns, conflictClause, newNode)
+	return NodeUpsertWithTableName[T](tx, DefaultNodeTableName, conflictColumns, conflictClause, newNode)
+}
+
+func NodeUpsertWithTableName[T any](tx *sql.Tx, nodeTableName, conflictColumns, conflictClause string, newNode Node[T]) (*Node[T], error) {
+	nodes, err := NodesUpsertWithTableName[T](tx, nodeTableName, conflictColumns, conflictClause, newNode)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +297,11 @@ func NodeUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string
 //
 // you would pass in "type, properties->'username'" as the conflicedColumns
 // and, in this case, "type='user'" as the conflictClause
-func NodesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string, newNodes ...Node[T]) (*NodeSet[T], error) {
+func NodesUpsert[T any](tx *sql.Tx, conflictColumns, conflictClause string, newNodes ...Node[T]) (*NodeSet[T], error) {
+	return NodesUpsertWithTableName[T](tx, DefaultNodeTableName, conflictColumns, conflictClause, newNodes...)
+}
+
+func NodesUpsertWithTableName[T any](tx *sql.Tx, nodeTableName, conflictColumns, conflictClause string, newNodes ...Node[T]) (*NodeSet[T], error) {
 	if len(conflictColumns) == 0 {
 		return nil, ErrBadUpsertQuery
 	}
@@ -313,7 +334,7 @@ func NodesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause strin
 		properties = excluded.properties
 	RETURNING
 		*
-	`, NodeTableName, strings.Join(values, ","), conflictColumns, conflictClause)
+	`, nodeTableName, strings.Join(values, ","), conflictColumns, conflictClause)
 
 	stmt, err := tx.Prepare(query)
 	if err != nil {
@@ -339,6 +360,10 @@ func NodesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause strin
 
 // NodeUpdate updates a node's properties. updatedNode.ID must exist in the database
 func NodeUpdate[T any](tx *sql.Tx, updatedNode Node[T], withReturn bool) (*Node[T], error) {
+	return NodeUpdateWithTableName[T](tx, DefaultNodeTableName, updatedNode, withReturn)
+}
+
+func NodeUpdateWithTableName[T any](tx *sql.Tx, nodeTableName string, updatedNode Node[T], withReturn bool) (*Node[T], error) {
 	var err error
 
 	query := fmt.Sprintf(`
@@ -351,7 +376,7 @@ func NodeUpdate[T any](tx *sql.Tx, updatedNode Node[T], withReturn bool) (*Node[
 		id = ?
 	RETURNING
 		*
-	`, NodeTableName)
+	`, nodeTableName)
 	properties, err := json.Marshal(updatedNode.Properties)
 	if err != nil {
 		return nil, err
@@ -360,7 +385,6 @@ func NodeUpdate[T any](tx *sql.Tx, updatedNode Node[T], withReturn bool) (*Node[
 	_, err = tx.Exec(query, updatedNode.entity.Active, string(properties), updatedNode.ID)
 	if err != nil {
 		return nil, errors.Join(err, tx.Rollback())
-
 	}
 
 	if !withReturn {
@@ -377,6 +401,10 @@ func NodeUpdate[T any](tx *sql.Tx, updatedNode Node[T], withReturn bool) (*Node[
 
 // NodeGetByID retrieves and typed node by its id
 func NodeGetByID[T any](tx *sql.Tx, id string) (*Node[T], error) {
+	return NodeGetByIDWithTableName[T](tx, DefaultNodeTableName, id)
+}
+
+func NodeGetByIDWithTableName[T any](tx *sql.Tx, nodeTableName, id string) (*Node[T], error) {
 	fil := FilterSet{
 		NewFilter("id", id),
 	}
@@ -386,7 +414,11 @@ func NodeGetByID[T any](tx *sql.Tx, id string) (*Node[T], error) {
 
 // NodeGetBy retuns a single typed node by filters
 func NodeGetBy[T any](tx *sql.Tx, filters FilterSet) (*Node[T], error) {
-	nodes, err := NodesGetBy[T](tx, &filters)
+	return NodeGetByWithTableName[T](tx, DefaultNodeTableName, filters)
+}
+
+func NodeGetByWithTableName[T any](tx *sql.Tx, nodeTableName string, filters FilterSet) (*Node[T], error) {
+	nodes, err := NodesGetByWithTableName[T](tx, nodeTableName, &filters)
 	if err != nil {
 		return nil, err
 	}
@@ -400,6 +432,10 @@ func NodeGetBy[T any](tx *sql.Tx, filters FilterSet) (*Node[T], error) {
 
 // NodesGetBy will return a typed NodeSet and can be extended using a FilterSet
 func NodesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*NodeSet[T], error) {
+	return NodesGetByWithTableName[T](tx, DefaultNodeTableName, filters)
+}
+
+func NodesGetByWithTableName[T any](tx *sql.Tx, nodeTableName string, filters *FilterSet) (*NodeSet[T], error) {
 	params := []any{}
 	var where string
 	var err error
@@ -418,7 +454,7 @@ func NodesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*NodeSet[T], error) {
 	FROM
 		%s
 	%s
-	`, NodeTableName, where)
+	`, nodeTableName, where)
 
 	stmt, err := tx.Prepare(query)
 	if err != nil {
@@ -449,6 +485,10 @@ func NodesOutRelatedBy(tx *sql.Tx, nodeID, edgeType string, filters *FilterSet) 
 	return NodesGetRelatedBy(tx, nodeID, "out", edgeType, filters)
 }
 
+func NodesOutRelatedByWithTableName(tx *sql.Tx, nodeTableName, edgeTableName, nodeID, edgeType string, filters *FilterSet) (*GenericEdgeNodeSet, error) {
+	return NodesGetRelatedByWithTableName(tx, nodeTableName, edgeTableName, nodeID, "out", edgeType, filters)
+}
+
 // NodesInRelatedBy will do a single in hop from nodeID via the edgeType
 // can be extended with a FilterSet the edge table is aliased as e, and the
 // node table is aliased as n
@@ -456,10 +496,18 @@ func NodesInRelatedBy(tx *sql.Tx, nodeID, edgeType string, filters *FilterSet) (
 	return NodesGetRelatedBy(tx, nodeID, "in", edgeType, filters)
 }
 
+func NodesInRelatedByWithTableName(tx *sql.Tx, nodeID, edgeType string, filters *FilterSet) (*GenericEdgeNodeSet, error) {
+	return NodesGetRelatedBy(tx, nodeID, "in", edgeType, filters)
+}
+
 // NodesGetRelatedBy will do a single in or out hop from nodeID via the edgeType
 // can be extended with a FilterSet the edge table is aliased as e, and the
 // node table is aliased as n
 func NodesGetRelatedBy(tx *sql.Tx, nodeID, direction, edgeType string, filters *FilterSet) (*GenericEdgeNodeSet, error) {
+	return NodesGetRelatedByWithTableName(tx, DefaultNodeTableName, DefaultEdgeTableName, nodeID, direction, edgeType, filters)
+}
+
+func NodesGetRelatedByWithTableName(tx *sql.Tx, nodeTableName, edgeTableName, nodeID, direction, edgeType string, filters *FilterSet) (*GenericEdgeNodeSet, error) {
 	var err error
 
 	edgeWhere := "in_id"
@@ -494,7 +542,7 @@ func NodesGetRelatedBy(tx *sql.Tx, nodeID, direction, edgeType string, filters *
 		e.%s = ?
 	AND
 		e.type = ?
-	`, EdgeTableName, NodeTableName, edgeJoin, edgeWhere)
+	`, edgeTableName, nodeTableName, edgeJoin, edgeWhere)
 
 	stmt, err := tx.Prepare(query)
 	if err != nil {
@@ -541,7 +589,11 @@ func NodesGetRelatedBy(tx *sql.Tx, nodeID, direction, edgeType string, filters *
 // EdgeCreate will add an edge to the database. The InID and OutID nodes
 // must already exist in the database or are apart of the current transaction
 func EdgeCreate[T any](tx *sql.Tx, newEdge Edge[T]) (*Edge[T], error) {
-	edges, err := EdgesCreate[T](tx, newEdge)
+	return EdgeCreateWithTableName[T](tx, DefaultEdgeTableName, newEdge)
+}
+
+func EdgeCreateWithTableName[T any](tx *sql.Tx, edgeTableName string, newEdge Edge[T]) (*Edge[T], error) {
+	edges, err := EdgesCreateWithTableName[T](tx, edgeTableName, newEdge)
 	if err != nil {
 		return nil, err
 	}
@@ -556,6 +608,10 @@ func EdgeCreate[T any](tx *sql.Tx, newEdge Edge[T]) (*Edge[T], error) {
 // EdgesCreate will add mulitple edges to the database. The InID and OutID nodes
 // for each edge must already exist in the database or are apart of the current transaction
 func EdgesCreate[T any](tx *sql.Tx, newEdges ...Edge[T]) (*EdgeSet[T], error) {
+	return EdgesCreateWithTableName[T](tx, DefaultEdgeTableName, newEdges...)
+}
+
+func EdgesCreateWithTableName[T any](tx *sql.Tx, edgeTableName string, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 	var err error
 
 	values := make([]string, len(newEdges))
@@ -579,7 +635,7 @@ func EdgesCreate[T any](tx *sql.Tx, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 		%s
 	RETURNING
 		*
-	`, EdgeTableName, strings.Join(values, ","))
+	`, edgeTableName, strings.Join(values, ","))
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return nil, err
@@ -604,6 +660,10 @@ func EdgesCreate[T any](tx *sql.Tx, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 
 // EdgeUpdate will update the properties on an existing edge
 func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[T], error) {
+	return EdgeUpdateWithTableName[T](tx, DefaultEdgeTableName, updatedEdge, withReturn)
+}
+
+func EdgeUpdateWithTableName[T any](tx *sql.Tx, edgeTableName string, updatedEdge Edge[T], withReturn bool) (*Edge[T], error) {
 	var err error
 
 	query := fmt.Sprintf(`
@@ -616,7 +676,7 @@ func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[
 		id = ?
 	RETURNING
 		*
-	`, EdgeTableName)
+	`, edgeTableName)
 	properties, err := json.Marshal(updatedEdge.Properties)
 	if err != nil {
 		return nil, err
@@ -640,7 +700,11 @@ func EdgeUpdate[T any](tx *sql.Tx, updatedEdge Edge[T], withReturn bool) (*Edge[
 }
 
 func EdgeUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string, newEdge Edge[T]) (*Edge[T], error) {
-	edges, err := EdgesUpsert[T](tx, conflictColumns, conflictClause, newEdge)
+	return EdgeUpsertWithTableName[T](tx, DefaultEdgeTableName, conflictColumns, conflictClause, newEdge)
+}
+
+func EdgeUpsertWithTableName[T any](tx *sql.Tx, edgetTableName, conflictColumns, conflictClause string, newEdge Edge[T]) (*Edge[T], error) {
+	edges, err := EdgesUpsertWithTableName[T](tx, edgetTableName, conflictColumns, conflictClause, newEdge)
 	if err != nil {
 		return nil, err
 	}
@@ -654,7 +718,11 @@ func EdgeUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string
 
 // EdgesUpsert will execute an upsert query based on the conflictColumns and the
 // conflictCluase values
-func EdgesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause string, newEdges ...Edge[T]) (*EdgeSet[T], error) {
+func EdgesUpsert[T any](tx *sql.Tx, conflictColumns, conflictClause string, newEdges ...Edge[T]) (*EdgeSet[T], error) {
+	return EdgesUpsertWithTableName[T](tx, DefaultEdgeTableName, conflictColumns, conflictClause, newEdges...)
+}
+
+func EdgesUpsertWithTableName[T any](tx *sql.Tx, edgeTableName, conflictColumns, conflictClause string, newEdges ...Edge[T]) (*EdgeSet[T], error) {
 	if len(conflictColumns) == 0 {
 		return nil, ErrBadUpsertQuery
 	}
@@ -688,7 +756,7 @@ func EdgesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause strin
 			properties = excluded.properties
 		RETURNING
 			*
-		`, EdgeTableName, strings.Join(values, ","), conflictColumns, conflictClause)
+		`, edgeTableName, strings.Join(values, ","), conflictColumns, conflictClause)
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return nil, err
@@ -713,16 +781,24 @@ func EdgesUpsert[T any](tx *sql.Tx, conflictColumns string, conflictClause strin
 
 // EdgeGetByID will return a typed edge by its id
 func EdgeGetByID[T any](tx *sql.Tx, id string) (*Edge[T], error) {
+	return EdgeGetByIDWithTableName[T](tx, DefaultEdgeTableName, id)
+}
+
+func EdgeGetByIDWithTableName[T any](tx *sql.Tx, edgeTableName, id string) (*Edge[T], error) {
 	fil := FilterSet{
 		NewFilter("id", id),
 	}
 
-	return EdgeGetBy[T](tx, fil)
+	return EdgeGetByWithTableName[T](tx, edgeTableName, fil)
 }
 
 // EdgeGetByID will return a single typed edge by its id
 func EdgeGetBy[T any](tx *sql.Tx, filters FilterSet) (*Edge[T], error) {
-	edges, err := EdgesGetBy[T](tx, &filters)
+	return EdgeGetByWithTableName[T](tx, DefaultEdgeTableName, filters)
+}
+
+func EdgeGetByWithTableName[T any](tx *sql.Tx, edgeTableName string, filters FilterSet) (*Edge[T], error) {
+	edges, err := EdgesGetByWithTableName[T](tx, edgeTableName, &filters)
 	if err != nil {
 		return nil, err
 	}
@@ -736,6 +812,10 @@ func EdgeGetBy[T any](tx *sql.Tx, filters FilterSet) (*Edge[T], error) {
 
 // EdgesGetBy will return a typed EdgeSet and can be extended using a FilterSet
 func EdgesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*EdgeSet[T], error) {
+	return EdgesGetByWithTableName[T](tx, DefaultEdgeTableName, filters)
+}
+
+func EdgesGetByWithTableName[T any](tx *sql.Tx, edgeTableName string, filters *FilterSet) (*EdgeSet[T], error) {
 	params := []any{}
 	var where string
 	var err error
@@ -754,7 +834,7 @@ func EdgesGetBy[T any](tx *sql.Tx, filters *FilterSet) (*EdgeSet[T], error) {
 	FROM
 		%s
 	%s
-	`, EdgeTableName, where)
+	`, edgeTableName, where)
 	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return nil, err

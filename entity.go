@@ -33,6 +33,16 @@ func (ns NodeSet[T]) Last() *Node[T] {
 	return nil
 }
 
+func (ns NodeSet[T]) IDs() []string {
+	ids := make([]string, len(ns))
+
+	for i, n := range ns {
+		ids[i] = n.ID
+	}
+
+	return ids
+}
+
 type Node[T any] struct {
 	entity
 	Properties T
@@ -54,6 +64,36 @@ func (es EdgeSet[T]) Last() *Edge[T] {
 	}
 
 	return nil
+}
+
+func (es EdgeSet[T]) IDs() []string {
+	ids := make([]string, len(es))
+
+	for i, n := range es {
+		ids[i] = n.ID
+	}
+
+	return ids
+}
+
+func (es EdgeSet[T]) InIDs() []string {
+	ids := make([]string, len(es))
+
+	for i, n := range es {
+		ids[i] = n.InID
+	}
+
+	return ids
+}
+
+func (es EdgeSet[T]) OutIDs() []string {
+	ids := make([]string, len(es))
+
+	for i, n := range es {
+		ids[i] = n.OutID
+	}
+
+	return ids
 }
 
 type Edge[T any] struct {

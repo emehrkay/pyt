@@ -920,3 +920,55 @@ func EdgeDeleteByIDsWithTableName(tx *sql.Tx, edgeTableName string, edgeIDs ...s
 
 	return count, nil
 }
+
+func EdgeDeleteByNodeIDs(tx *sql.Tx, inIDs []string, outIDs []string) (int64, error) {
+	return EdgeDeleteByNodeIDsWithTableName(tx, DefaultEdgeTableName, inIDs, outIDs)
+}
+
+func EdgeDeleteByNodeIDsWithTableName(tx *sql.Tx, edgeTableName string, inIDs []string, outIDs []string) (int64, error) {
+	params := []any{}
+	where := "WHERE "
+
+	if len(outIDs) > 0 {
+		outHolders := []string{}
+
+		for _, id := range outIDs {
+			outHolders = append(outHolders, "?")
+			params = append(params, id)
+		}
+
+		where = fmt.Sprintf(`%s %s.out_id IN (%s)`, where, edgeTableName, strings.Join(outHolders, ", "))
+	}
+
+	if len(inIDs) > 0 {
+		inHolders := []string{}
+		for _, id := range inIDs {
+			inHolders = append(inHolders, "?")
+			params = append(params, id)
+		}
+
+		if len(outIDs) > 0 {
+			where = where + " OR "
+		}
+
+		where = fmt.Sprintf(`%s %s.in_id IN (%s)`, where, edgeTableName, strings.Join(inHolders, ", "))
+	}
+
+	query := fmt.Sprintf(`
+	DELETE FROM
+		%s
+	%s
+	`, edgeTableName, where)
+
+	res, err := tx.Exec(query, params...)
+	if err != nil {
+		return 0, errors.Join(err, tx.Rollback())
+	}
+
+	count, err := res.RowsAffected()
+	if err != nil {
+		return 0, errors.Join(err, tx.Rollback())
+	}
+
+	return count, nil
+}
